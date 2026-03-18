@@ -66,19 +66,25 @@ class GuandanGame {
     // 创建房间
     async createRoom() {
         const name = document.getElementById('player-name').value.trim();
+        console.log('创建房间 clicked, name:', name);
+        
         if (!name) {
             alert('请输入名字');
             return;
         }
         
         try {
+            console.log('初始化 PeerJS...');
             await this.peer.init(name, 
                 (msg, from) => this.handleMessage(msg, from),
                 (playerId, playerName) => this.handlePlayerJoin(playerId, playerName),
                 (playerId) => this.handlePlayerLeave(playerId)
             );
             
+            console.log('创建房间...');
             this.roomId = await this.peer.createRoom();
+            console.log('房间号:', this.roomId);
+            
             this.isHost = true;
             this.myPosition = 0;
             this.playerNames[0] = name;
