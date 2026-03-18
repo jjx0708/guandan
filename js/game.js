@@ -66,7 +66,7 @@ class GuandanGame {
     // 创建房间
     async createRoom() {
         const name = document.getElementById('player-name').value.trim();
-        console.log('创建房间 clicked, name:', name);
+        console.log('[Game] 创建房间 clicked, name:', name);
         
         if (!name) {
             alert('请输入名字');
@@ -74,25 +74,27 @@ class GuandanGame {
         }
         
         try {
-            console.log('初始化 PeerJS...');
+            console.log('[Game] 初始化 PeerJS...');
             await this.peer.init(name, 
                 (msg, from) => this.handleMessage(msg, from),
                 (playerId, playerName) => this.handlePlayerJoin(playerId, playerName),
                 (playerId) => this.handlePlayerLeave(playerId)
             );
             
-            console.log('创建房间...');
+            console.log('[Game] 创建房间...');
             this.roomId = await this.peer.createRoom();
-            console.log('房间号:', this.roomId);
+            console.log('[Game] 房间号:', this.roomId);
             
             this.isHost = true;
             this.myPosition = 0;
             this.playerNames[0] = name;
             this.playerIds[0] = this.peer.playerId;
             
+            console.log('[Game] 调用 showWaitingRoom...');
             this.showWaitingRoom();
+            console.log('[Game] showWaitingRoom 已调用');
         } catch (err) {
-            console.error('创建房间失败:', err);
+            console.error('[Game] 创建房间失败:', err);
             alert('创建房间失败: ' + err.message);
         }
     }

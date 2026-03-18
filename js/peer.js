@@ -11,10 +11,16 @@ class GuandanPeer {
         this.onMessage = null;       // 消息回调
         this.onConnect = null;       // 连接回调
         this.onDisconnect = null;    // 断开回调
+        this.initialized = false;    // 初始化状态
     }
 
     // 初始化 Peer
     init(playerName, onMessage, onConnect, onDisconnect) {
+        if (this.initialized) {
+            console.log('Peer already initialized');
+            return Promise.resolve(this.playerId);
+        }
+        
         this.playerName = playerName;
         this.onMessage = onMessage;
         this.onConnect = onConnect;
@@ -22,25 +28,34 @@ class GuandanPeer {
         
         // 生成随机ID
         this.playerId = this.generateId();
+        console.log('Generated player ID:', this.playerId);
         
         return new Promise((resolve, reject) => {
-            this.peer = new Peer(this.playerId, {
-                debug: 1
-            });
-            
-            this.peer.on('open', (id) => {
-                console.log('My peer ID is:', id);
-                resolve(id);
-            });
-            
-            this.peer.on('connection', (conn) => {
-                this.handleIncomingConnection(conn);
-            });
-            
-            this.peer.on('error', (err) => {
-                console.error('Peer error:', err);
+            try {
+                this.peer = new Peer(this.playerId, {
+                    debug: 1
+                });
+                
+                this.peer.on('open', (id) => {
+                    console.log('PeerJS opened with ID:', id);
+                    this.initialized = true;
+                    resolve(id);
+                });
+                
+                this.peer.on('connection', (conn) => {
+                    console.log('Incoming connection from:', conn.peer);
+                    this.handleIncomingConnection(conn);
+                });
+                
+                this.peer.on('error', (err) => {
+                    console.error('PeerJS error:', err);
+                    reject(err);
+                });
+                
+            } catch (err) {
+                console.error('Failed to create Peer:', err);
                 reject(err);
-            });
+            }
         });
     }
 
@@ -58,10 +73,11 @@ class GuandanPeer {
     createRoom() {
         this.isHost = true;
         this.hostId = this.playerId;
-        const roomId = this.generateRoomId();
         
-        // 主机不需要连接到自己，直接返回房间号
-        console.log('房间号生成:', roomId);
+        const roomId = this.generateRoomId();
+        console.log('Host creating room:', roomId);
+        
+        // 直接返回房间号，不需要连接到自己
         return Promise.resolve(roomId);
     }
 
@@ -70,34 +86,43 @@ class GuandanPeer {
         this.isHost = false;
         this.hostId = hostId || roomId;
         
+        console.log('Joining room:', roomId, 'host:', this.hostId);
+        
         return new Promise((resolve, reject) => {
-            const conn = this.peer.connect(roomId, { reliable: true });
-            
-            conn.on('open', () => {
-                this.connections.set('host', conn);
-                // 告诉主机自己的信息
-                this.sendToHost({
-                    type: 'join',
-                    playerId: this.playerId,
-                    playerName: this.playerName
+            // 等待一小段时间让主机准备好
+            setTimeout(() => {
+                const conn = this.peer.connect(roomId, { reliable: true });
+                
+                conn.on('open', () => {
+                    console.log('Connected to host:', roomId);
+                    this.connections.set('host', conn);
+                    // 告诉主机自己的信息
+                    this.sendToHost({
+                        type: 'join',
+                        playerId: this.playerId,
+                        playerName: this.playerName
+                    });
+                    resolve();
                 });
-                resolve();
-            });
-            
-            conn.on('data', (data) => {
-                this.handleMessage(data, conn);
-            });
-            
-            conn.on('close', () => {
-                this.connections.delete('host');
-                if (this.onDisconnect) {
-                    this.onDisconnect();
-                }
-            });
-            
-            conn.on('error', (err) => {
-                reject(err);
-            });
+                
+                conn.on('data', (data) => {
+                    this.handleMessage(data, conn);
+                });
+                
+                conn.on('close', () => {
+                    console.log('Connection to host closed');
+                    this.connections.delete('host');
+                    if (this.onDisconnect) {
+                        this.onDisconnect(this.hostId);
+                    }
+                });
+                
+                conn.on('error', (err) => {
+                    console.error('Connection error:', err);
+                    reject(err);
+                });
+                
+            }, 500); // 500ms delay to let host initialize
         });
     }
 
@@ -113,19 +138,7 @@ class GuandanPeer {
         
         conn.on('close', () => {
             console.log('Connection closed:', conn.peer);
-            const playerId = this.getPlayerIdFromConn(conn);
-            if (playerId && this.onDisconnect) {
-                this.onDisconnect(playerId);
-            }
         });
-    }
-
-    // 从连接获取玩家ID
-    getPlayerIdFromConn(conn) {
-        for (const [id, c] of this.connections) {
-            if (c === conn) return id;
-        }
-        return null;
     }
 
     // 处理消息
@@ -142,7 +155,7 @@ class GuandanPeer {
                 break;
                 
             case 'broadcast':
-                // 广播消息（主机发给自己，再由主机转发给其他玩家）
+                // 广播消息（主机转发）
                 if (this.isHost && this.onMessage) {
                     this.onMessage(data.message, data.from);
                 }
@@ -162,6 +175,7 @@ class GuandanPeer {
             conn.send(message);
             return true;
         }
+        console.warn('No connection to host');
         return false;
     }
 
@@ -178,7 +192,7 @@ class GuandanPeer {
         
         // 主机广播给所有玩家
         for (const [id, conn] of this.connections) {
-            if (id !== 'room' && id !== excludeId && conn.open) {
+            if (id !== excludeId && conn.open) {
                 conn.send(message);
             }
         }
