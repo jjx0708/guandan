@@ -60,23 +60,9 @@ class GuandanPeer {
         this.hostId = this.playerId;
         const roomId = this.generateRoomId();
         
-        // 主机连接到自己的另一个peer作为房间标识
-        return new Promise((resolve, reject) => {
-            const conn = this.peer.connect(roomId, { reliable: true });
-            
-            conn.on('open', () => {
-                this.connections.set('room', conn);
-                resolve(roomId);
-            });
-            
-            conn.on('data', (data) => {
-                this.handleMessage(data, conn);
-            });
-            
-            conn.on('close', () => {
-                this.connections.delete('room');
-            });
-        });
+        // 主机不需要连接到自己，直接返回房间号
+        console.log('房间号生成:', roomId);
+        return Promise.resolve(roomId);
     }
 
     // 加入房间
