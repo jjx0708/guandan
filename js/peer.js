@@ -8,19 +8,14 @@ class GuandanPeer {
         this.playerId = null;        // 自己ID
         this.playerName = null;      // 自己名字
         this.isHost = false;
-        this.onMessage = null;       // 消息回调
-        this.onConnect = null;       // 连接回调
-        this.onDisconnect = null;    // 断开回调
-        this.initialized = false;    // 初始化状态
+        this.onMessage = null;       
+        this.onConnect = null;       
+        this.onDisconnect = null;    
+        this.initialized = false;    
     }
 
     // 初始化 Peer
     init(playerName, onMessage, onConnect, onDisconnect) {
-        if (this.initialized) {
-            console.log('Peer already initialized');
-            return Promise.resolve(this.playerId);
-        }
-        
         this.playerName = playerName;
         this.onMessage = onMessage;
         this.onConnect = onConnect;
@@ -64,65 +59,63 @@ class GuandanPeer {
         return 'gd-' + Math.random().toString(36).substr(2, 6).toUpperCase();
     }
 
-    // 生成房间号
-    generateRoomId() {
-        return Math.random().toString(36).substr(2, 6).toUpperCase();
-    }
-
     // 创建房间（作为主机）
+    // 房主用自己的 playerId 作为房间地址
     createRoom() {
         this.isHost = true;
         this.hostId = this.playerId;
         
-        const roomId = this.generateRoomId();
-        console.log('Host creating room:', roomId);
+        console.log('Host creating room, hostId:', this.hostId);
         
-        // 直接返回房间号，不需要连接到自己
-        return Promise.resolve(roomId);
+        // 房间号就是房主的 peerId
+        return Promise.resolve(this.hostId);
     }
 
-    // 加入房间
+    // 加入房间 - 房间号就是房主的 peerId
     joinRoom(roomId, hostId) {
         this.isHost = false;
-        this.hostId = hostId || roomId;
+        this.hostId = roomId; // 房间号就是房主的 ID
         
-        console.log('Joining room:', roomId, 'host:', this.hostId);
+        console.log('Joining room:', roomId);
         
         return new Promise((resolve, reject) => {
-            // 等待一小段时间让主机准备好
-            setTimeout(() => {
-                const conn = this.peer.connect(roomId, { reliable: true });
+            // 直接连接到房主
+            const conn = this.peer.connect(roomId, { reliable: true });
+            
+            const timeout = setTimeout(() => {
+                if (!conn.open) {
+                    reject(new Error('连接超时，请确认房主在线'));
+                }
+            }, 10000);
+            
+            conn.on('open', () => {
+                clearTimeout(timeout);
+                console.log('Connected to host:', roomId);
+                this.connections.set('host', conn);
                 
-                conn.on('open', () => {
-                    console.log('Connected to host:', roomId);
-                    this.connections.set('host', conn);
-                    // 告诉主机自己的信息
-                    this.sendToHost({
-                        type: 'join',
-                        playerId: this.playerId,
-                        playerName: this.playerName
-                    });
-                    resolve();
+                // 告诉主机自己的信息
+                this.sendToHost({
+                    type: 'join',
+                    playerId: this.playerId,
+                    playerName: this.playerName
                 });
-                
-                conn.on('data', (data) => {
-                    this.handleMessage(data, conn);
-                });
-                
-                conn.on('close', () => {
-                    console.log('Connection to host closed');
-                    this.connections.delete('host');
-                    if (this.onDisconnect) {
-                        this.onDisconnect(this.hostId);
-                    }
-                });
-                
-                conn.on('error', (err) => {
-                    console.error('Connection error:', err);
-                    reject(err);
-                });
-                
-            }, 500); // 500ms delay to let host initialize
+                resolve();
+            });
+            
+            conn.on('data', (data) => {
+                this.handleMessage(data, conn);
+            });
+            
+            conn.on('close', () => {
+                console.log('Connection to host closed');
+                this.connections.delete('host');
+            });
+            
+            conn.on('error', (err) => {
+                clearTimeout(timeout);
+                console.error('Connection error:', err);
+                reject(err);
+            });
         });
     }
 
@@ -147,7 +140,7 @@ class GuandanPeer {
         
         switch (data.type) {
             case 'join':
-                // 新玩家加入
+                // 新玩家加入 - 记住连接
                 this.connections.set(data.playerId, conn);
                 if (this.onConnect) {
                     this.onConnect(data.playerId, data.playerName);
@@ -182,7 +175,6 @@ class GuandanPeer {
     // 广播消息（仅主机使用）
     broadcast(message, excludeId = null) {
         if (!this.isHost) {
-            // 非主机发送给主机，由主机转发
             return this.sendToHost({
                 type: 'broadcast',
                 message,

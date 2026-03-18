@@ -66,36 +66,46 @@ class GuandanGame {
     // 创建房间
     async createRoom() {
         const name = document.getElementById('player-name').value.trim();
-        console.log('[Game] 创建房间 clicked, name:', name);
-        
         if (!name) {
             alert('请输入名字');
             return;
         }
-        
+
+        const btn = document.getElementById('create-room-btn');
+        btn.disabled = true;
+        btn.textContent = '连接中...';
+
+        // peer.init() 同步生成 playerId，先启动初始化流程（不 await）
+        const initPromise = this.peer.init(name,
+            (msg, from) => this.handleMessage(msg, from),
+            (playerId, playerName) => this.handlePlayerJoin(playerId, playerName),
+            (playerId) => this.handlePlayerLeave(playerId)
+        );
+
+        // playerId 已同步生成，直接用作房间号
+        this.roomId = this.peer.playerId;
+        this.isHost = true;
+        this.myPosition = 0;
+        this.playerNames[0] = name;
+        this.playerIds[0] = this.peer.playerId;
+
+        // 立即跳转到等待房间界面
+        this.showWaitingRoom();
+
+        // 等待 PeerJS 服务器连接完成
         try {
-            console.log('[Game] 初始化 PeerJS...');
-            await this.peer.init(name, 
-                (msg, from) => this.handleMessage(msg, from),
-                (playerId, playerName) => this.handlePlayerJoin(playerId, playerName),
-                (playerId) => this.handlePlayerLeave(playerId)
-            );
-            
-            console.log('[Game] 创建房间...');
-            this.roomId = await this.peer.createRoom();
-            console.log('[Game] 房间号:', this.roomId);
-            
-            this.isHost = true;
-            this.myPosition = 0;
-            this.playerNames[0] = name;
-            this.playerIds[0] = this.peer.playerId;
-            
-            console.log('[Game] 调用 showWaitingRoom...');
-            this.showWaitingRoom();
-            console.log('[Game] showWaitingRoom 已调用');
+            await initPromise;
+            console.log('[Game] PeerJS 已连接，房间号:', this.roomId);
         } catch (err) {
-            console.error('[Game] 创建房间失败:', err);
-            alert('创建房间失败: ' + err.message);
+            console.error('[Game] PeerJS 连接失败:', err);
+            alert('连接服务器失败，请重试: ' + (err.message || err.type || err));
+            // 连接失败则返回登录界面
+            this.gameState = 'login';
+            document.getElementById('waiting-room-screen').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '创建房间';
         }
     }
 
