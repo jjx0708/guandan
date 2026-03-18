@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a1a2e">
+    <title>掼蛋</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦞</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦞</text></svg>">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <!-- 引导添加 PWA -->
+    <div id="pwa-prompt" class="pwa-prompt hidden">
+        <div class="pwa-prompt-content">
+            <div class="pwa-icon">🦞</div>
+            <h2>添加到主屏幕</h2>
+            <p>点击下方分享按钮，选择"添加到主屏幕"，即可像App一样使用</p>
+            <button id="close-pwa-prompt">知道了</button>
+        </div>
+    </div>
+    
+    <div id="app">
+        <!-- 登录/创建房间界面 -->
+        <div id="login-screen" class="screen">
+            <div class="logo">🦞</div>
+            <h1>掼蛋</h1>
+            <div class="login-form">
+                <input type="text" id="player-name" placeholder="请输入你的名字" maxlength="8">
+                <div class="btn-group">
+                    <button id="create-room-btn" class="btn btn-primary">创建房间</button>
+                    <button id="join-room-btn" class="btn btn-secondary">加入房间</button>
+                </div>
+                <div id="join-form" class="hidden">
+                    <input type="text" id="room-id-input" placeholder="请输入房间号" maxlength="6">
+                    <button id="confirm-join-btn" class="btn btn-primary">确认加入</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 等待房间界面 -->
+        <div id="waiting-room-screen" class="screen hidden">
+            <div class="room-info">
+                <div class="room-id">房间号: <span id="display-room-id">------</span></div>
+                <button id="copy-room-id-btn" class="btn btn-small">复制</button>
+            </div>
+            <div class="players-list">
+                <div class="player-slot" id="player-0">
+                    <span class="player-position">南家(庄家)</span>
+                    <span class="player-name">等待中...</span>
+                    <span class="player-status"></span>
+                </div>
+                <div class="player-slot" id="player-1">
+                    <span class="player-position">西家</span>
+                    <span class="player-name">等待中...</span>
+                    <span class="player-status"></span>
+                </div>
+                <div class="player-slot" id="player-2">
+                    <span class="player-position">北家</span>
+                    <span class="player-name">等待中...</span>
+                    <span class="player-status"></span>
+                </div>
+                <div class="player-slot" id="player-3">
+                    <span class="player-position">东家</span>
+                    <span class="player-name">等待中...</span>
+                    <span class="player-status"></span>
+                </div>
+            </div>
+            <div id="host-controls" class="hidden">
+                <button id="start-game-btn" class="btn btn-primary btn-large">开始游戏</button>
+                <div class="kick-controls">
+                    <button id="kick-player-btn" class="btn btn-danger btn-small">踢人</button>
+                    <select id="kick-player-select" class="hidden">
+                        <option value="">选择玩家...</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- 游戏界面 -->
+        <div id="game-screen" class="screen hidden">
+            <!-- 顶部信息栏 -->
+            <div class="game-header">
+                <div class="level-info">
+                    <span>当前级别: </span>
+                    <span id="current-level">A</span>
+                </div>
+                <div class="score-info">
+                    <span>我方: </span>
+                    <span id="our-score">0</span>
+                    <span> | 对家: </span>
+                    <span id="their-score">0</span>
+                </div>
+                <div class="total-score">
+                    <span>累计: </span>
+                    <span id="total-score">0</span>
+                </div>
+            </div>
+
+            <!-- 出牌区域 -->
+            <div class="play-area">
+                <!-- 对家（北家）出牌 -->
+                <div class="player-play-area opponent-top" id="opponent-top-play">
+                    <div class="player-label">北家</div>
+                    <div class="played-cards"></div>
+                </div>
+
+                <div class="middle-area">
+                    <!-- 西家出牌 -->
+                    <div class="player-play-area opponent-left" id="opponent-left-play">
+                        <div class="player-label">西家</div>
+                        <div class="played-cards"></div>
+                    </div>
+
+                    <!-- 桌面 -->
+                    <div class="table-area">
+                        <div class="last-play-info" id="last-play-info"></div>
+                        <div class="table-cards" id="table-cards"></div>
+                    </div>
+
+                    <!-- 东家出牌 -->
+                    <div class="player-play-area opponent-right" id="opponent-right-play">
+                        <div class="player-label">东家</div>
+                        <div class="played-cards"></div>
+                    </div>
+                </div>
+
+                <!-- 队友（南家）出牌 -->
+                <div class="player-play-area partner" id="partner-play">
+                    <div class="player-label">搭档</div>
+                    <div class="played-cards"></div>
+                </div>
+            </div>
+
+            <!-- 手牌区域 -->
+            <div class="hand-area">
+                <div class="partner-hand-info" id="partner-hand-info"></div>
+                <div class="my-hand" id="my-hand"></div>
+                <div class="action-buttons">
+                    <button id="play-cards-btn" class="btn btn-primary btn-large" disabled>出牌</button>
+                    <button id="pass-btn" class="btn btn-secondary" disabled>过</button>
+                </div>
+            </div>
+
+            <!-- 贡牌/还牌弹窗 -->
+            <div id="tribute-modal" class="modal hidden">
+                <div class="modal-content">
+                    <h2 id="tribute-title">请贡牌</h2>
+                    <p id="tribute-desc">请选择一张最大的牌贡给上家</p>
+                    <div class="tribute-cards" id="tribute-cards"></div>
+                    <button id="tribute-confirm-btn" class="btn btn-primary" disabled>确认</button>
+                </div>
+            </div>
+
+            <!-- 游戏结束弹窗 -->
+            <div id="game-over-modal" class="modal hidden">
+                <div class="modal-content">
+                    <h2>游戏结束</h2>
+                    <div id="round-result"></div>
+                    <div id="score-changes"></div>
+                    <button id="continue-btn" class="btn btn-primary">继续</button>
+                    <button id="restart-btn" class="btn btn-secondary">重开</button>
+                </div>
+            </div>
+
+            <!-- 等待队友贡牌 -->
+            <div id="waiting-tribute" class="modal hidden">
+                <div class="modal-content">
+                    <p>等待队友贡牌...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/cards.js"></script>
+    <script src="js/peer.js"></script>
+    <script src="js/game.js"></script>
+    <script>
+        // PWA 提示
+        if ('standalone' in navigator && !navigator.standalone) {
+            // 显示 PWA 添加提示
+            const prompt = document.getElementById('pwa-prompt');
+            if (prompt && !localStorage.getItem('pwa-dismissed')) {
+                prompt.classList.remove('hidden');
+            }
+            document.getElementById('close-pwa-prompt')?.addEventListener('click', () => {
+                prompt.classList.add('hidden');
+                localStorage.setItem('pwa-dismissed', 'true');
+            });
+        }
+    </script>
+</body>
+</html>
